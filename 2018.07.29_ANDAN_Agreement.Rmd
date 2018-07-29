@@ -15,6 +15,7 @@ output:
     df_print: paged
     include:
       after_body: footer.html
+    self_contained: yes
 knit: (function(inputFile, encoding) { 
       out_dir <- 'docs';
       rmarkdown::render(inputFile,
