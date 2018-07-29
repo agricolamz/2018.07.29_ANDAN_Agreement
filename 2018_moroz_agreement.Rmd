@@ -15,7 +15,6 @@ output:
     df_print: paged
     include:
       after_body: footer.html
-    self_contained: no
 knit: (function(inputFile, encoding) { 
       out_dir <- 'docs';
       rmarkdown::render(inputFile,
@@ -29,13 +28,8 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 
 <style>
 .parallax {
-    /* The image used */
     background-image: url("argue.jpg");
-    
-    /* Set a specific height */
     min-height: 300px; 
-
-    /* Create the parallax scrolling effect */
     background-attachment: fixed;
     background-position: center;
     background-repeat: no-repeat;
