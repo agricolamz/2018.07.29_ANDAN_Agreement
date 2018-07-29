@@ -3,7 +3,6 @@ title: "Меры согласия"
 author: "Г. Мороз"
 editor_options: 
   chunk_output_type: console
-output_dir: docs
 output:
   html_document:
     theme: spacelab
@@ -16,8 +15,12 @@ output:
     df_print: paged
     include:
       after_body: footer.html
-    lib_dir: site_libs
     self_contained: no
+knit: (function(inputFile, encoding) { 
+      out_dir <- 'docs';
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(dirname(inputFile), out_dir, 'index.html')) })
 ---
 
 ```{r setup, include=FALSE}
