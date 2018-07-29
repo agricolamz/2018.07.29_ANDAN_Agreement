@@ -1,0 +1,321 @@
+---
+title: "Меры согласия"
+author: "Г. Мороз"
+editor_options: 
+  chunk_output_type: console
+output_dir: docs
+output:
+  html_document:
+    theme: spacelab
+    highlight: pygments
+    toc: yes
+    toc_position: right
+    toc_depth: 3
+    toc_float: yes
+    smooth_scroll: no
+    df_print: paged
+    include:
+      after_body: footer.html
+    lib_dir: site_libs
+    self_contained: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+<style>
+.parallax {
+    /* The image used */
+    background-image: url("argue.jpg");
+    
+    /* Set a specific height */
+    min-height: 300px; 
+
+    /* Create the parallax scrolling effect */
+    background-attachment: fixed;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: auto;
+}
+</style>
+
+<div class="parallax"></div>
+
+
+### 1. Введение
+
+* ваши данные представляют собой много наблюдений одного и того же полученные разным способом
+    * несколько докторов ставит диагноз нескольким пациентам
+    * несколько информантов оценили род в некотором списке слов
+    * несколько информантов оценили приемлимость высказываний на школе от 1 до 5
+    * разметчики независимо разметили какие-то явления на одном и том же материале
+    
+* __Насколько суждения разных оценщиков (*raters*) относительно субъектов оценки (*subjects*) согласуются между собой?__
+* Почему не эти методы?
+    * коэфициенты корреляции
+    * парный t-test
+    * χ², тест Фишера
+    
+#### 1.1 Библиотеки
+```{r}
+library(tidyverse)
+library(irr)
+```
+
+#### 1.2 Данные: зиловский эксперимент
+В зиловском диалекте андийского языка существует два класса для неодушевленных предметов. В 2017 году был проведен эксперимент, чтобы проверить, наличие вариативности в отнесению к тому или иному классу заимствованой и исконной лексики.
+
+```{r}
+zilo_classes <- read_csv("https://goo.gl/miGq7Q")
+head(zilo_classes)
+```
+
+Переменные в датасете:
+
+* s_id — код испытуемого
+* age_2017 — возраст на 2017 год
+* w_id — код стимула
+* stimulus
+* translation_en
+* translation_ru
+* stimulus_source — тип слова: исконное или заимствованное
+* class — класс слова, к которому испытуемый отнес слово
+
+#### 1.3 Данные: исследование маргинальных русских глаголов
+Данные взяты из [исследования [Endresen, Janda 2015]](https://goo.gl/GC4RjQ), посвященное исследованию маргинальных глаголов изменения состояния в русском языке. Испытуемые (70 школьников, 51 взрослый) оценивали по [шкале Ликерта (1...5)](https://goo.gl/R4gHiq) приемлемость глаголов с приставками _о-_ и _у-_:
+
+* широко используемуе в СРЛЯ (_освежить_, _уточнить_)
+* встретившие всего несколько раз в корпусе (_оржавить_, _увкуснить_)
+* искусственные слова (_ономить_, _укампить_)
+
+```{r}
+marginal_verbs <- read_csv("https://goo.gl/6Phok3")
+head(marginal_verbs)
+```
+
+Переменные в датасете:
+
+* Gender
+* Age
+* AgeGroup — взрослые или школьники
+* Education
+* City
+* SubjectCode — код испытуемого
+* Score — оценка, поставленная испытуемым (A — самая высокая, E  — самая низкая)
+* GivenScore — оценка, поставленная испытуемым (5 — самая высокая, 1  — самая низкая)
+* Stimulus
+* Prefix
+* WordType — тип слова: частотное, редкое, искусственное
+* CorpusFrequency — частотность в корпусе
+
+#### 1.4 Данные: переводы 57 сонета У. Шекспира
+В данном датасете я собрал информацию о количестве слогов в переводах 57 сонета У. Шекспира и в самом сонете.
+
+```{r}
+sonet <- read.csv("https://goo.gl/cqPDkq")
+head(sonet)
+```
+
+* line — номер строки
+* остальные переменные — количество слогов в переводах
+
+<div class="parallax"></div>
+
+### 2. Преобразования данных
+Все функции пакета `irr` не настроены на формат tidy data, и требует следующего формата:
+
+* каждый столбец — это суждения одного оценщика
+* каждая строчка — это то, что оценивают 
+
+```{r}
+zilo_classes %>% 
+  select(s_id, stimulus, translation_ru, stimulus_source, class) %>% 
+  spread(key = s_id, value = class) ->
+  zilo_classes_short
+head(zilo_classes_short)
+```
+
+<div class="parallax"></div>
+
+### 3. Процент полного согласия
+Процент полного согласия — это процент случаев, когда все оценщики идентичны в своих суждениях.
+
+```{r}
+agree(zilo_classes_short[,-c(1:3)])
+round(74.5*106/100) # количество случаев полного согласия
+```
+
+Эту меру иногда ошибочно приводят как меру согласия оценщиков, однако она не учитывает возможность случайного совпадения / расхождения суждений.
+
+<div class="parallax"></div>
+
+### 4. Каппа Коэна
+Каппа Коэна мера согласованности между двумя категориальными переменными. Обычно говорят о двух оценщиках, которые распеделяют $n$ наблюдений по $s$ категориям.
+
+$\kappa = \frac{p_o-p_e}{1-p_e},$
+
+где $p_o$ — доля полного согласия, а $p_e$ — вероятность случайного согласия.
+
+Для случая $s$ = 2, можно нарисовать следующую таблицу сопряженности:
+
+|       | $s_1$ | $s_2$ |
+|:-----:|:-----:|:-----:|
+| $s_1$ |   a   |   b   |
+| $s_2$ |   c   |   d   |
+
+В таком случае:
+
+* $p_o = \frac{a+d}{a+b+c+d}$
+* $p_e = \frac{(a+b)\times(a+c) + (d+b)\times(d+c)}{(a+b+c+d)^2}$
+
+\par Выберем двух спикиров из наших данных:
+```{r}
+zilo_classes_2s <- zilo_classes_short[,c(4, 14)]
+agree(zilo_classes_2s)
+table(zilo_classes_2s)
+p_o <- (47+46)/(47+46+4+9)
+p_o
+p_e <- ((47+9)*(47+4)+(46+9)*(46+4))/(47+9+4+46)^2
+p_e
+coehns_kappa <- (p_o - p_e)/(1 - p_e)
+coehns_kappa
+kappa2(zilo_classes_2s)
+```
+
+Функция `kappa2` из пакета `irr` также приводит p-value, которое высчитывается для нулевой гипотезы, что каппа  Коэна равна нулю.
+
+Если вы хотите, чтобы ваши оценщики не оценивались как равноценные, вы можете использовать взвешенную каппу Коэна.
+
+В [Landis, Koch 1977] предложена следующая интерпретация каппы Коэна:
+
+* κ < 0 poor agreement
+* 0–0.20 slight agreement
+* 0.21–0.40 fair agreement
+* 0.41–0.60 moderate agreement
+* 0.61–0.80 substantial agreement
+* 0.81–1 almost perfect agreement
+
+Каппа Коэна --- не единственная мера согласия между двумя оценщиками. Существуют работы, в которых каппу Коэна ругают.
+
+<div class="parallax"></div>
+
+### 5. Ранговые корреляции: тау Кендалл
+
+Существует несколько $\tau$-мер ($\tau$-a, $\tau$-b, $\tau$-c), это формула для $\tau$-a:
+
+$$\tau = 2\times \frac{C-D}{n\times(n-1)}$$
+
+* С --- concordant pairs
+* D --- discordant pairs
+* n --- количество наблюдений
+
+```{r, echo = FALSE}
+data.frame(ranker_1 = 1:12,
+           ranker_2 = c(2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11),
+           C = c(10, 10, 8, 8, 6, 6, 4, 4, 2, 2, 0, 0),
+           D = c(1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0))
+```
+
+```{r}
+C <- c(10, 10, 8, 8, 6, 6, 4, 4, 2, 2, 0, 0)
+D <- c(1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0)
+n <- 12
+
+2*sum(C-D)/(n*(n-1))
+
+ranker_1 = 1:12
+ranker_2 = c(2, 1, 4, 3, 6, 5, 8, 7, 10, 9, 12, 11)
+cor(ranker_1, ranker_2, method = "kendall")
+
+data.frame(cor(sonet[, -1], method = "kendall"))
+```
+
+Бывает еще $\rho$ Спирмана (`cor(..., method = "spearman")`), $\gamma$ Гудмана и Крускала и, наверное, еще много других мер.
+
+Не забывайте также про функцию `cor.test()`.
+
+<div class="parallax"></div>
+
+### 6. Каппа Фляйса
+Обощением каппы Коэна для оценщиков больше двух является каппа Фляйса. $k$ оценщиков распеделяют $n$ наблюдений по $s$ категориям.
+
+$\kappa = \frac{\bar{P}_o-\bar{P}_e}{1-\bar{P}_e},$
+
+где $\bar{P}_o$ — средняя доля пар согласных оценщиков из всех пар, а $\bar{P}_e$ — вероятность случайного согласия.
+
+```{r}
+zilo_classes_short[,-c(1:3)]
+```
+
+В нашем датасете $k$ = 16, $n$ = 106, $s$ = 2.
+
+Посчитаем, насколько оценщики согласны относительно третьего слова (3 b, 13 r). Для этого посчитаем долю пар оценщиков, которые согласны, среди всех возможных пар:
+
+```{r}
+P_3 <- (choose(13, 2) + choose(3, 2))/ choose(16, 2)
+```
+
+Посчитаем это значение для каждого слова:
+```{r}
+zilo_classes %>% 
+  count(w_id, class) %>% 
+  spread(key = class, value = n, fill = 0) %>% 
+  mutate(P_i = (choose(b, 2) + choose(r, 2))/ choose(16, 2))
+```
+
+Возьмем среднее этой меры:
+```{r}
+zilo_classes %>% 
+  count(w_id, class) %>% 
+  spread(key = class, value = n, fill = 0) %>% 
+  mutate(P_i = (choose(b, 2) + choose(r, 2))/ choose(16, 2)) %>% 
+  summarise(P_o = mean(P_i)) %>% 
+  unlist ->
+  P_o
+P_o
+```
+
+Для того, чтобы посчитать вероятность случайного согласия, найдем доли:
+```{r}
+zilo_classes %>% 
+  group_by(class) %>% 
+  summarise(n = n()) %>% 
+  mutate(freq = n / sum(n))
+```
+
+Возведем их в квадрат и сложим:
+```{r}
+zilo_classes %>% 
+  group_by(class) %>% 
+  summarise(n = n()) %>% 
+  mutate(freq_2 = (n / sum(n))^2) %>% 
+  summarise(P_e = sum(freq_2)) %>% 
+  unlist ->
+  P_e
+P_e
+```
+
+```{r}
+Fleiss_kappa <- (P_o-P_e)/(1-P_e)
+Fleiss_kappa <- unname(Fleiss_kappa)
+Fleiss_kappa
+kappam.fleiss(zilo_classes_short[,-c(1:3)])
+```
+
+<div class="parallax"></div>
+
+### 7. Intra-class correlation coefficient (ICC)
+
+В работе (Shrout, Fleiss, 1979) различают три ситуации:
+
+> * _One-way random effects model_ — each target is rated by a different set of $k$ judges, randomly selected froma a larger population of judges.
+> * _Two-way random effects model_ — a random sample of $k$ judges is selected from a larger population, and each judge rated each target that is, each judge rates $n$ targets alltogether.
+> * _Two-way mixed model_ —  each target is rated by each of the same $k$ judges, who are the only judges of interest.
+
+```{r}
+icc(sonet[,-1], model = "twoway", type = "agreement")
+```
+
+
+<div class="parallax"></div>
